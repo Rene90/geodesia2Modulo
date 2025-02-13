@@ -11,6 +11,11 @@ struct PointCurvilinear{
     la:f64,
     h:f64,
 }
+struct PointCurvilinear1{
+    h:f64,
+    phi:f64,
+    n:f64,
+}
 
 impl Vector3D {
     fn add(&self, other:&Vector3D)-> Vector3D{
@@ -81,13 +86,17 @@ fn read_coordinate(prompt: &str) -> PointCurvilinear {
 
     PointCurvilinear { fi, la, h }
 }
+fn compute_n(a: f64, b: f64, p_geo: &PointCurvilinear1) -> f64 {
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+    a / (1.0 - e2 * p_geo.phi.sin().powi(2)).sqrt()
+}
 fn computeN (a:f64, b:f64, punto:&PointCurvilinear)->f64{
     let fi_radianes = punto.fi * (PI / 180.0); // Convertir grados a radianes
     let numerador = a * a;
     println!("numerador es: {}", numerador);
     
     let denominador = (((a * a) * fi_radianes.cos().powi(2)) + ((b * b) * fi_radianes.sin().powi(2))).sqrt();
-    println!("numerador es: {}", denominador);
+    println!("denominador es: {}", denominador);
     numerador / denominador
 }
 fn computeCartesian(punto:&PointCurvilinear,primerVertical:f64, a:f64, b:f64)->Vector3D{
@@ -98,6 +107,83 @@ fn computeCartesian(punto:&PointCurvilinear,primerVertical:f64, a:f64, b:f64)->V
     let z = ((primerVertical * b.powi(2) / a.powi(2))+punto.h)* fi_radianes.sin();
     Vector3D {x,y,z}
 }
+fn computeLongitude(punto: &Vector3D)-> f64{
+    let y = punto.y;
+    let x = punto.x;
+    let arctan2_yx = y.atan2(x);
+    arctan2_yx 
+}
+
+fn compute_iterative(punto: &Vector3D, a: f64, b: f64) -> (f64, f64, f64) {
+    // Valores iniciales
+    let mut n = a;
+    let z = punto.z;
+    let x = punto.x;
+    let y = punto.y;
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+    let p = (x.powi(2) + y.powi(2)).sqrt();
+    let magnitud = punto.module();
+    let mut h = magnitud - (a * b).sqrt();
+    let phi1 = z / p;
+    let mut phi2 = 1.0 - (e2 * n / (n + h));
+    let mut phi3 = phi1 / phi2;
+    let mut phi = phi3.atan();
+    let mut contador =0;
+
+    // Umbral de convergencia
+    let threshold = 1e-6;
+
+    // Bucle iterativo
+    loop {
+        contador = contador + 1;
+        // Guardar los valores anteriores
+        let h_prev = h;
+        let phi_prev = phi;
+
+        // Calcular nuevos valores
+        n = compute_n(a, b, &PointCurvilinear1 { h, phi, n });
+        h = compute_h_iterative(punto, &PointCurvilinear1 { h, phi, n }, phi, a, b);
+        phi = compute_latitude_iterative(punto, &PointCurvilinear1 { h, phi, n }, h, a, b);
+        println!("iteracion: {} ", contador);
+        println!("phi: {} grados", phi * 180.0 / PI);
+        println!("h: {} ", h);
+        println!("N: {} ", n);
+        // Verificar convergencia
+        if (h - h_prev).abs() < threshold && (phi - phi_prev).abs() < threshold {
+            break;
+        }
+    }
+
+    (h, phi, n)
+}
+
+// Función para calcular h iterativamente
+fn compute_h_iterative(punto: &Vector3D, p_geo: &PointCurvilinear1, phi: f64, a: f64, b: f64) -> f64 {
+    let z = punto.z;
+    let x = punto.x;
+    let y = punto.y;
+    let fphi = phi; // phi ya está en radianes
+    let p = (x.powi(2) + y.powi(2)).sqrt();
+    let n = compute_n(a, b, p_geo);
+    let h1 = p / fphi.cos();
+    h1 - n
+}
+
+// Función para calcular la latitud iterativamente
+fn compute_latitude_iterative(punto: &Vector3D, p_geo: &PointCurvilinear1, h: f64, a: f64, b: f64) -> f64 {
+    let z = punto.z;
+    let x = punto.x;
+    let y = punto.y;
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+    let p = (x.powi(2) + y.powi(2)).sqrt();
+    let n = compute_n(a, b, p_geo);
+    let z_p = z / p;
+    let temp_e = 1.0 - (e2 * n / (n + h));
+    let temp_inv = 1.0 / temp_e;
+    let ze = z_p * temp_inv;
+    ze.atan()
+}
+
 
 fn main() {
     //WGS84 parameters
@@ -119,9 +205,27 @@ fn main() {
     let modulo = resultado_resta.module();
     println!("La primer vertical n1 es: {}", n1);
     println!("La segunda vertical n1 es: {}", n2);
-    println!("Las coordenadas cartesianas de la cdmx son: {:?}", v1);
-    println!("Las coordenadas cartesianas de toluca son: {:?}", v2);
+    println!("Las coordenadas cartesianas del primer punto son: {:?}", v1);
+    println!("Las coordenadas cartesianas del segundo punto son: {:?}", v2);
     println!("El vector formado de ambos puntos es: {:?}", resultado_resta);
     println!("El módulo del vector resultante es: {}", modulo);
+    println!("Calculando las coordenadas geodesicas de vuelta");
+    let longitud1 = computeLongitude(&v1);
+    println!("longitud1: {}", longitud1);
+    
+    let longitud2 =computeLongitude(&v2);
+    println!("longitud2: {}", longitud2);
+    let (h11, phi11, n11) = compute_iterative(&v1, a, b);
+    println!("h: {}", h11);
+    println!("phi: {} radianes", phi11);
+    println!("phi: {} grados", phi11 * 180.0 / PI);
+    println!("n: {}", n11);
+    let (h22, phi22, n22) = compute_iterative(&v2, a, b);
+    println!("h: {}", h22);
+    println!("phi: {} radianes", phi22);
+    println!("phi: {} grados", phi22 * 180.0 / PI);
+    println!("n: {}", n22);
+
+
 
 }
