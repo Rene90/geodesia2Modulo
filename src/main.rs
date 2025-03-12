@@ -111,6 +111,14 @@ fn compute_n(a: f64, b: f64, p_geo: &PointCurvilinear1) -> f64 {
     let e2 = 1.0 - (b.powi(2) / a.powi(2));
     a / (1.0 - e2 * p_geo.phi.sin().powi(2)).sqrt()
 }
+fn compute_nsencillo(a: f64, b: f64, latitud: f64) -> f64 {
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+    a / (1.0 - e2 * latitud.sin().powi(2)).sqrt()
+}
+fn compute_msencillo(a: f64, b: f64, latitud:f64) -> f64 {
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+    (a*(1.0 - e2)) / (1.0 - e2 * latitud.sin().powi(2)).powf(1.5)
+}
 fn compute_m(a: f64, b: f64, p_geo: &PointCurvilinear) -> f64 {
     let e2 = 1.0 - (b.powi(2) / a.powi(2));
     (a*(1.0 - e2)) / (1.0 - e2 * p_geo.fi.sin().powi(2)).powf(1.5)
@@ -208,11 +216,66 @@ fn compute_latitude_iterative(punto: &Vector3D, p_geo: &PointCurvilinear1, h: f6
     let ze = z_p * temp_inv;
     ze.atan()
 }
+//Funcion para calcular el arco de meridiano entre 2 latitudes diferentes usando aproximacion por expansion de Binomio de Newton y solucionando de manera analitica
+fn arcoMeridiano(p_geo1: &PointCurvilinear, p_geo2: &PointCurvilinear, a: f64, b:f64)->f64{
+
+    let phi1_rad = p_geo1.fi* (PI / 180.0);
+    let phi2_rad = p_geo2.fi* (PI / 180.0);
+    let delta_phi = phi2_rad - phi1_rad;
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+
+    // Términos de la expansión en serie
+    let term1 = delta_phi;
+    let term2 = (3.0 / 4.0) * e2 * delta_phi;
+    let term3 = -(3.0 / 8.0) * e2 * (f64::sin(2.0 * phi2_rad) - f64::sin(2.0 * phi1_rad));
+    let term4 = (15.0 / 64.0) * e2.powi(2) * delta_phi;
+    let term5 = -(15.0 / 32.0) * e2.powi(2) * (f64::sin(2.0 * phi2_rad) - f64::sin(2.0 * phi1_rad));
+    let term6 = (15.0 / 256.0) * e2.powi(2) * (f64::sin(4.0 * phi2_rad) - f64::sin(4.0 * phi1_rad));
+
+    // Sumar todos los términos
+    let s = a * (1.0 - e2) * (term1 + term2 + term3 + term4 + term5 + term6);
+    s
+}
+fn arcoMeridianoPromedio(p_geo1: &PointCurvilinear, p_geo2: &PointCurvilinear, a: f64, b:f64)->f64{
+
+    let phi1_rad = p_geo1.fi* (PI / 180.0);
+    let phi2_rad = p_geo2.fi* (PI / 180.0);
+    let phimedia = (phi1_rad+phi2_rad)/2.0;
+    let delta_phi = phi2_rad - phi1_rad;
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+    let m = compute_msencillo(a,b,phimedia);
+    let s= delta_phi*m;
+    s
 
 
+   
+}
 
-// Funcion para calcular distancias cortas con la formula de Puissant
-fn compute_p2_Puissant(p_geo: &PointCurvilinear, a: f64, b: f64, s: f64, azimuth: f64)-> f64 {
+//Funcion para calcular el arco de paralelo ente 2 longitudes diferentes radio de circulo utilizando la primer vertical o N
+fn arcoParalelo(p_geo1: &PointCurvilinear, p_geo2: &PointCurvilinear,a: f64, b:f64)->f64{
+    let phi1_rad = p_geo1.fi* (PI / 180.0);
+    let phi2_rad = p_geo2.fi* (PI / 180.0);
+    let la1_rad = p_geo1.la * (PI / 180.0);
+    let la2_rad = p_geo1.la * (PI / 180.0);
+    let menor = phi1_rad.min(phi2_rad);
+    //Utilizo la latiud menor para sacar el radio de la primer normal porque es el cateto adyacente del triangulo rectangulo formado entre ambos puntos
+    let nm = compute_nsencillo(a,b,menor);
+    let radio = nm*menor.cos();
+    //diferencia de longitudes
+    let deltaLambda=  la2_rad-la1_rad;
+    let s = radio * deltaLambda;
+    s
+}
+
+//Funcio para calcular distancia entre dos puntos usando el arco de paralelo y el arco de meridiano como los catetos de un  triangulo rectangulo
+fn calcularDistanciaArcos(arcoM: f64, arcoP: f64)-> f64{
+    let s = arcoM.powi(2)+ arcoP.powi(2);
+    let s2 =s.sqrt();
+    s2
+}
+
+// Funcion para calcular el punto siguiente con la formula de Puissant hasta 150 kilometros
+fn compute_p2_Puissant(p_geo: &PointCurvilinear, a: f64, b: f64, s: f64, azimuth: f64)-> PointCurvilinear {
     let n = computeN(a, b, p_geo);
     let m = compute_m(a, b, p_geo);
     let e2 = 1.0 - (b.powi(2) / a.powi(2));
@@ -220,15 +283,27 @@ fn compute_p2_Puissant(p_geo: &PointCurvilinear, a: f64, b: f64, s: f64, azimuth
     let lam1=p_geo.la* (PI / 180.0);
     let s12=s;
     let alpha12 = azimuth* (PI / 180.0);
+    //Primero calculamos delta phi para obtener phi2
     let term1 = s12 * alpha12.cos() / m;
     let term2 = s12.powi(2) * phi1.tan() * alpha12.sin().powi(2) / (2.0 * m * n);
     let term3 = s12.powi(3) * alpha12.cos() * alpha12.sin().powi(2) * (1.0 + 3.0 * phi1.tan().powi(2)) / (6.0 * m * n.powi(2));
     let rho_prime_prime = term1 - term2 - term3;
 
     let delta_phi = rho_prime_prime * (1.0 - (3.0 * e2 * phi1.sin() * phi1.cos()) / (2.0 * (1.0 - e2 * phi1.sin().powi(2))));
-    delta_phi
-
-
+    let phi2 = delta_phi* (180.0 / PI) + p_geo.fi;
+    println!("La delta Phi es de : {}", delta_phi* (180.0 / PI));
+    //calculamos delta lambda para obtener lambda2
+    let latitud_media = (p_geo.fi+phi2)/2.0;
+    let nm = compute_nsencillo(a,b,phi2);
+    let complemento_phi = (PI/2.0)-phi1;
+    let term1l = (s12/nm) * (alpha12.sin()/complemento_phi.sin());
+    let term2l = (s12.powi(3)/(6.0*nm.powi(3))) * (alpha12.sin()/complemento_phi.sin());
+    let term3l = (s12.powi(3)/(6.0*nm.powi(3))) * (alpha12.sin().powi(3)/complemento_phi.sin().powi(3));
+    let delta_lambda = term1l-term2l+term3l;
+    println!("La delta Lambda es de : {}", delta_lambda);
+    let lambda2 = delta_lambda + p_geo.la;
+    let height =0.0;
+    PointCurvilinear{fi:phi2,la:lambda2,h:p_geo.h}
 }
 
 
@@ -249,8 +324,28 @@ fn main() {
     //let p2  =read_coordinate("Ingrese las coordenadas del segundo punto");
     //Calcular los vectores Normal de cada punto 
     let n1 = computeN(a,b,&p1);
-    let delta_phires =compute_p2_Puissant(&p1, a, b, s, azimuth);
-    println!("La delta phi  es: {}", delta_phires);
+    let p2 =compute_p2_Puissant(&p1, a, b, s, azimuth);
+    println!("La latitud del punto 2  es: {}", p2.fi);
+    println!("La longitud del punto 2  es: {}", p2.la);
+    //Calcular la distancia entre ambos puntos para comprobar aproximacion, usando los arcos de meridiano y de paralelo
+    let arcoMer =arcoMeridiano(&p1, &p2, a, b);
+    //let arcoMer =arcoMeridianoPromedio(&p1, &p2, a, b);
+    let arcoPar =arcoParalelo(&p1, &p2, a, b);
+    let distanciaPuntos = calcularDistanciaArcos(arcoMer,arcoPar);
+    println!("El arco de meridiano entre ambos puntos es de : {}", arcoMer);
+    println!("El arco de paralelo entre ambos puntos es de {}", arcoPar);
+    println!("La distancia entre ambos puntos usando los arcos de meridiano y paralelo es de  {}", distanciaPuntos);
+    println!("La diferencia entre la distancia original y la calculada es de {}", s-distanciaPuntos);
+    let n2 = computeN(a,b,&p2);
+    let v1 = computeCartesian(&p1,n1,a,b);
+    let v2 = computeCartesian(&p2,n2,a,b);
+    let resultado_resta = v1.subtract(&v2);
+    let modulo = resultado_resta.module();
+    println!("La distancia entre ambos puntos usando la distancia euclideana es de  {}", modulo);
+    println!("La diferencia entre la distancia original y la geometrica es de {}", s-modulo);
+
+
+
     //let n2 = computeN(a,b,&p2);
     //Obtener las coordenadas cartesianas de cada punto
     //let v1 = computeCartesian(&p1,n1,a,b);
