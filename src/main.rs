@@ -6,6 +6,10 @@ struct Vector3D {
     y:f64,
     z:f64,
 }
+struct Datadist {
+    azimuth12:f64,
+    dist12:f64,
+}
 struct PointCurvilinear{
     fi:f64,
     la:f64,
@@ -63,6 +67,23 @@ fn read_vector(prompt: &str) -> Vector3D {
 
     Vector3D { x, y, z }
 }
+
+
+fn read_azdist(prompt: &str) -> Datadist {
+    println!("{}", prompt);
+    let mut input = String::new();
+    println!("Ingrese la distancia al punto 2:");
+    io::stdin().read_line(&mut input).expect("Error al leer la entrada");
+    let dist12: f64 = input.trim().parse().expect("La distancia debe ser un número");
+    input.clear(); // Limpiar el buffer de entrada
+    println!("Ingrese el azimuth al punto 2:");
+    io::stdin().read_line(&mut input).expect("Error al leer la entrada");
+    let azimuth12: f64 = input.trim().parse().expect("el azimuth debe ser un numero");
+    input.clear(); // Limpiar el buffer de entrada
+    Datadist{ azimuth12,dist12 }
+}
+
+
 fn read_coordinate(prompt: &str) -> PointCurvilinear {
     println!("{}", prompt);
     let mut input = String::new();
@@ -89,6 +110,10 @@ fn read_coordinate(prompt: &str) -> PointCurvilinear {
 fn compute_n(a: f64, b: f64, p_geo: &PointCurvilinear1) -> f64 {
     let e2 = 1.0 - (b.powi(2) / a.powi(2));
     a / (1.0 - e2 * p_geo.phi.sin().powi(2)).sqrt()
+}
+fn compute_m(a: f64, b: f64, p_geo: &PointCurvilinear) -> f64 {
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+    (a*(1.0 - e2)) / (1.0 - e2 * p_geo.fi.sin().powi(2)).powf(1.5)
 }
 fn computeN (a:f64, b:f64, punto:&PointCurvilinear)->f64{
     let fi_radianes = punto.fi * (PI / 180.0); // Convertir grados a radianes
@@ -185,6 +210,30 @@ fn compute_latitude_iterative(punto: &Vector3D, p_geo: &PointCurvilinear1, h: f6
 }
 
 
+
+// Funcion para calcular distancias cortas con la formula de Puissant
+fn compute_p2_Puissant(p_geo: &PointCurvilinear, a: f64, b: f64, s: f64, azimuth: f64)-> f64 {
+    let n = computeN(a, b, p_geo);
+    let m = compute_m(a, b, p_geo);
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+    let phi1=p_geo.fi* (PI / 180.0);
+    let lam1=p_geo.la* (PI / 180.0);
+    let s12=s;
+    let alpha12 = azimuth* (PI / 180.0);
+    let term1 = s12 * alpha12.cos() / m;
+    let term2 = s12.powi(2) * phi1.tan() * alpha12.sin().powi(2) / (2.0 * m * n);
+    let term3 = s12.powi(3) * alpha12.cos() * alpha12.sin().powi(2) * (1.0 + 3.0 * phi1.tan().powi(2)) / (6.0 * m * n.powi(2));
+    let rho_prime_prime = term1 - term2 - term3;
+
+    let delta_phi = rho_prime_prime * (1.0 - (3.0 * e2 * phi1.sin() * phi1.cos()) / (2.0 * (1.0 - e2 * phi1.sin().powi(2))));
+    delta_phi
+
+
+}
+
+
+
+
 fn main() {
     //WGS84 parameters
     let a = 6378137.000;
@@ -194,37 +243,42 @@ fn main() {
     //let v2 = read_vector("Ingrese el segundo vector:");
     //Pedir al usuario dos coordenadas 
     let p1  =read_coordinate("Ingrese las coordenadas del primer punto");
-    let p2  =read_coordinate("Ingrese las coordenadas del segundo punto");
+    let azdist = read_azdist("Ingrese la distancia y azimuth al siguiente punto");
+    let azimuth=azdist.azimuth12;
+    let s= azdist.dist12;
+    //let p2  =read_coordinate("Ingrese las coordenadas del segundo punto");
     //Calcular los vectores Normal de cada punto 
     let n1 = computeN(a,b,&p1);
-    let n2 = computeN(a,b,&p2);
+    let delta_phires =compute_p2_Puissant(&p1, a, b, s, azimuth);
+    println!("La delta phi  es: {}", delta_phires);
+    //let n2 = computeN(a,b,&p2);
     //Obtener las coordenadas cartesianas de cada punto
-    let v1 = computeCartesian(&p1,n1,a,b);
-    let v2 = computeCartesian(&p2,n2,a,b);
-    let resultado_resta = v1.subtract(&v2);
-    let modulo = resultado_resta.module();
-    println!("La primer vertical n1 es: {}", n1);
-    println!("La segunda vertical n1 es: {}", n2);
-    println!("Las coordenadas cartesianas del primer punto son: {:?}", v1);
-    println!("Las coordenadas cartesianas del segundo punto son: {:?}", v2);
-    println!("El vector formado de ambos puntos es: {:?}", resultado_resta);
-    println!("El módulo del vector resultante es: {}", modulo);
-    println!("Calculando las coordenadas geodesicas de vuelta");
-    let longitud1 = computeLongitude(&v1);
-    println!("longitud1: {}", longitud1);
+    //let v1 = computeCartesian(&p1,n1,a,b);
+    //let v2 = computeCartesian(&p2,n2,a,b);
+    //let resultado_resta = v1.subtract(&v2);
+    //let modulo = resultado_resta.module();
+    //println!("La primer vertical n1 es: {}", n1);
+    //println!("La segunda vertical n1 es: {}", n2);
+    //println!("Las coordenadas cartesianas del primer punto son: {:?}", v1);
+    //println!("Las coordenadas cartesianas del segundo punto son: {:?}", v2);
+    //println!("El vector formado de ambos puntos es: {:?}", resultado_resta);
+    //println!("El módulo del vector resultante es: {}", modulo);
+    //println!("Calculando las coordenadas geodesicas de vuelta");
+    //let longitud1 = computeLongitude(&v1);
+    //println!("longitud1: {}", longitud1);
     
-    let longitud2 =computeLongitude(&v2);
-    println!("longitud2: {}", longitud2);
-    let (h11, phi11, n11) = compute_iterative(&v1, a, b);
-    println!("h: {}", h11);
-    println!("phi: {} radianes", phi11);
-    println!("phi: {} grados", phi11 * 180.0 / PI);
-    println!("n: {}", n11);
-    let (h22, phi22, n22) = compute_iterative(&v2, a, b);
-    println!("h: {}", h22);
-    println!("phi: {} radianes", phi22);
-    println!("phi: {} grados", phi22 * 180.0 / PI);
-    println!("n: {}", n22);
+    //let longitud2 =computeLongitude(&v2);
+    //println!("longitud2: {}", longitud2);
+    //let (h11, phi11, n11) = compute_iterative(&v1, a, b);
+    //println!("h: {}", h11);
+    //println!("phi: {} radianes", phi11);
+    //println!("phi: {} grados", phi11 * 180.0 / PI);
+    //println!("n: {}", n11);
+    //let (h22, phi22, n22) = compute_iterative(&v2, a, b);
+    //println!("h: {}", h22);
+    //println!("phi: {} radianes", phi22);
+    //println!("phi: {} grados", phi22 * 180.0 / PI);
+    //println!("n: {}", n22);
 
 
 
