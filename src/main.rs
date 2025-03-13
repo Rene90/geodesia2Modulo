@@ -256,10 +256,11 @@ fn arcoParalelo(p_geo1: &PointCurvilinear, p_geo2: &PointCurvilinear,a: f64, b:f
     let phi1_rad = p_geo1.fi* (PI / 180.0);
     let phi2_rad = p_geo2.fi* (PI / 180.0);
     let la1_rad = p_geo1.la * (PI / 180.0);
-    let la2_rad = p_geo1.la * (PI / 180.0);
+    let la2_rad = p_geo2.la * (PI / 180.0);
     let menor = phi1_rad.min(phi2_rad);
     //Utilizo la latiud menor para sacar el radio de la primer normal porque es el cateto adyacente del triangulo rectangulo formado entre ambos puntos
     let nm = compute_nsencillo(a,b,menor);
+    println!("nm {}", nm);
     let radio = nm*menor.cos();
     //diferencia de longitudes
     let deltaLambda=  la2_rad-la1_rad;
@@ -300,8 +301,8 @@ fn compute_p2_Puissant(p_geo: &PointCurvilinear, a: f64, b: f64, s: f64, azimuth
     let term2l = (s12.powi(3)/(6.0*nm.powi(3))) * (alpha12.sin()/complemento_phi.sin());
     let term3l = (s12.powi(3)/(6.0*nm.powi(3))) * (alpha12.sin().powi(3)/complemento_phi.sin().powi(3));
     let delta_lambda = term1l-term2l+term3l;
-    println!("La delta Lambda es de : {}", delta_lambda);
-    let lambda2 = delta_lambda + p_geo.la;
+    println!("La delta Lambda es de : {}", delta_lambda* (180.0 / PI));
+    let lambda2 = delta_lambda* (180.0 / PI) + p_geo.la;
     let height =0.0;
     PointCurvilinear{fi:phi2,la:lambda2,h:p_geo.h}
 }
