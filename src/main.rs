@@ -274,6 +274,62 @@ fn calcularDistanciaArcos(arcoM: f64, arcoP: f64)-> f64{
     let s2 =s.sqrt();
     s2
 }
+// Funcion para calcular distancia y azimuth con Puissant a traves de iteraciones
+fn computePuissantInverso(p_geo1: &PointCurvilinear,p_geo2: &PointCurvilinear, a: f64, b: f64)-> (f64, f64) {
+    let n1 = computeN(a, b, p_geo1);
+    let m1 = compute_m(a, b, p_geo1);
+    let n2 = computeN(a, b, p_geo2);
+    let phi1=p_geo1.fi* (PI / 180.0);
+    let phi2=p_geo2.fi* (PI / 180.0);
+    let lam1=p_geo1.la* (PI / 180.0);
+    let lam2=p_geo2.la* (PI / 180.0);
+    let delta_lambda = (lam1 - lam2).abs();
+    let delta_phi = (phi1 - phi2).abs();
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));
+    // primera iteracion, se usa primer termino para aproximar el azimuth directo
+    let primeralpha1216= delta_phi * m1 / (1.0 - (3.0 * e2 * phi1.sin() * phi1.cos()) / (2.0 * (1.0 - e2 * phi1.sin().powi(2))));    
+    let complemento_phi = (PI/2.0)-phi2;
+    let primeralpha1217 =delta_lambda*n2*complemento_phi.sin();
+    let mut cocientePrimero = (primeralpha1217 / primeralpha1216).atan();
+    // primera distancia
+    let mut primers1217 = delta_lambda*n2*complemento_phi.sin()/cocientePrimero;
+    println!("Azimuth primera aprox : {}", cocientePrimero* (180.0 / PI));
+    println!("Distancia primera aprox : {}", primers1217);  
+    // iteraciones
+    let thresholdAzimuth = 1e-6;
+    let thresholdDistancia = 1e-3;
+    let mut iter_count = 0;
+    let max_iter = 15;
+    loop {
+        iter_count += 1;
+        if iter_count > max_iter {
+            println!("Advertencia: No converge después de {} iteraciones", max_iter);
+            break;
+        }
+        let term2 = primers1217.powi(2) * phi1.tan() * primeralpha1217.sin().powi(2) / (2.0 * m1 * n1);
+        let term3 = primers1217.powi(3) * primeralpha1217.cos() * primeralpha1217.sin().powi(2) * (1.0 + 3.0 * phi1.tan().powi(2)) / (6.0 * m1 * n1.powi(2));
+        let alpha1216 = ((delta_phi / (1.0 - (3.0 * e2 * phi1.sin() * phi1.cos()) / (2.0 * (1.0 - e2 * phi1.sin().powi(2)))))+ term2 + term3) * m1;
+        let term2l = (primers1217.powi(3)/(6.0*n2.powi(3))) * (primeralpha1217.sin()/complemento_phi.sin());
+        let term3l = (primers1217.powi(3)/(6.0*n2.powi(3))) * (primeralpha1217.sin().powi(3)/complemento_phi.sin().powi(3));
+        let alpha1217 = (delta_lambda + term2l - term3l)*n2*complemento_phi.sin();
+        let cocientesegundo = (alpha1217 / alpha1216).atan();
+        let segundos1217  = (delta_lambda + term2l - term3l)*n2 /  (cocientesegundo.sin()/complemento_phi.sin());
+        println!("Iteración: Azimuth: {}, Distancia: {}", cocientesegundo * (180.0 / PI), segundos1217);
+
+        if (cocientesegundo - cocientePrimero).abs() < thresholdAzimuth && (segundos1217 - primers1217).abs()  < thresholdDistancia{
+            cocientePrimero = cocientesegundo;
+            primers1217 =segundos1217;
+            break;
+        }
+        cocientePrimero = cocientesegundo;
+        primers1217 =segundos1217;   
+
+    }
+
+    (cocientePrimero,primers1217)
+
+
+}
 
 // Funcion para calcular el punto siguiente con la formula de Puissant hasta 150 kilometros
 fn compute_p2_Puissant(p_geo: &PointCurvilinear, a: f64, b: f64, s: f64, azimuth: f64)-> PointCurvilinear {
@@ -289,8 +345,11 @@ fn compute_p2_Puissant(p_geo: &PointCurvilinear, a: f64, b: f64, s: f64, azimuth
     let term2 = s12.powi(2) * phi1.tan() * alpha12.sin().powi(2) / (2.0 * m * n);
     let term3 = s12.powi(3) * alpha12.cos() * alpha12.sin().powi(2) * (1.0 + 3.0 * phi1.tan().powi(2)) / (6.0 * m * n.powi(2));
     let rho_prime_prime = term1 - term2 - term3;
-
+    //let s1216 = ((delta_phi / (1.0 - (3.0 * e2 * phi1.sin() * phi1.cos()) / (2.0 * (1.0 - e2 * phi1.sin().powi(2))))) + term2 + term3)* m/ alpha12.cos();
+    
     let delta_phi = rho_prime_prime * (1.0 - (3.0 * e2 * phi1.sin() * phi1.cos()) / (2.0 * (1.0 - e2 * phi1.sin().powi(2))));
+    //let alpha1216 = ((delta_phi / (1.0 - (3.0 * e2 * phi1.sin() * phi1.cos()) / (2.0 * (1.0 - e2 * phi1.sin().powi(2)))))+ term2 + term3) * m;
+    //let primeralpha1216= delta_phi * m / (1.0 - (3.0 * e2 * phi1.sin() * phi1.cos()) / (2.0 * (1.0 - e2 * phi1.sin().powi(2))));
     let phi2 = delta_phi* (180.0 / PI) + p_geo.fi;
     println!("La delta Phi es de : {}", delta_phi* (180.0 / PI));
     //calculamos delta lambda para obtener lambda2
@@ -300,6 +359,13 @@ fn compute_p2_Puissant(p_geo: &PointCurvilinear, a: f64, b: f64, s: f64, azimuth
     let term1l = (s12/nm) * (alpha12.sin()/complemento_phi.sin());
     let term2l = (s12.powi(3)/(6.0*nm.powi(3))) * (alpha12.sin()/complemento_phi.sin());
     let term3l = (s12.powi(3)/(6.0*nm.powi(3))) * (alpha12.sin().powi(3)/complemento_phi.sin().powi(3));
+    
+    //let s1217  = (delta_lambda + term2l - term3l)*nm /  (alpha12.sin()/complemento_phi.sin());
+    //let alpha1217 = (delta_lambda + term2l - term3l)*nm /  (1/complemento_phi.sin());
+    //let primeralpha1217 =delta_lambda*nm*complemento_phi.sin();
+    //let primers1217 = delta_lambda*nm*complemento_phi.sin()/primeralpha1217;
+
+
     let delta_lambda = term1l-term2l+term3l;
     println!("La delta Lambda es de : {}", delta_lambda* (180.0 / PI));
     let lambda2 = delta_lambda* (180.0 / PI) + p_geo.la;
@@ -319,6 +385,12 @@ fn main() {
     //let v2 = read_vector("Ingrese el segundo vector:");
     //Pedir al usuario dos coordenadas 
     let p1  =read_coordinate("Ingrese las coordenadas del primer punto");
+    // let p2  =read_coordinate("Ingrese las coordenadas del segundo punto");
+
+
+    //let (resultadoAzimuth,resultadodistancia)=computePuissantInverso(&p1,&p2, a, b);
+
+    //problema directo punto , distancia y azimuth
     let azdist = read_azdist("Ingrese la distancia y azimuth al siguiente punto");
     let azimuth=azdist.azimuth12;
     let s= azdist.dist12;
@@ -329,21 +401,21 @@ fn main() {
     println!("La latitud del punto 2  es: {}", p2.fi);
     println!("La longitud del punto 2  es: {}", p2.la);
     //Calcular la distancia entre ambos puntos para comprobar aproximacion, usando los arcos de meridiano y de paralelo
-    let arcoMer =arcoMeridiano(&p1, &p2, a, b);
+    //let arcoMer =arcoMeridiano(&p1, &p2, a, b);
     //let arcoMer =arcoMeridianoPromedio(&p1, &p2, a, b);
-    let arcoPar =arcoParalelo(&p1, &p2, a, b);
-    let distanciaPuntos = calcularDistanciaArcos(arcoMer,arcoPar);
-    println!("El arco de meridiano entre ambos puntos es de : {}", arcoMer);
-    println!("El arco de paralelo entre ambos puntos es de {}", arcoPar);
-    println!("La distancia entre ambos puntos usando los arcos de meridiano y paralelo es de  {}", distanciaPuntos);
-    println!("La diferencia entre la distancia original y la calculada es de {}", s-distanciaPuntos);
-    let n2 = computeN(a,b,&p2);
-    let v1 = computeCartesian(&p1,n1,a,b);
-    let v2 = computeCartesian(&p2,n2,a,b);
-    let resultado_resta = v1.subtract(&v2);
-    let modulo = resultado_resta.module();
-    println!("La distancia entre ambos puntos usando la distancia euclideana es de  {}", modulo);
-    println!("La diferencia entre la distancia original y la geometrica es de {}", s-modulo);
+    //let arcoPar =arcoParalelo(&p1, &p2, a, b);
+    //let distanciaPuntos = calcularDistanciaArcos(arcoMer,arcoPar);
+    //println!("El arco de meridiano entre ambos puntos es de : {}", arcoMer);
+    //println!("El arco de paralelo entre ambos puntos es de {}", arcoPar);
+    //println!("La distancia entre ambos puntos usando los arcos de meridiano y paralelo es de  {}", distanciaPuntos);
+    //println!("La diferencia entre la distancia original y la calculada es de {}", s-distanciaPuntos);
+    //let n2 = computeN(a,b,&p2);
+    //let v1 = computeCartesian(&p1,n1,a,b);
+    //let v2 = computeCartesian(&p2,n2,a,b);
+    //let resultado_resta = v1.subtract(&v2);
+    //let modulo = resultado_resta.module();
+    //println!("La distancia entre ambos puntos usando la distancia euclideana es de  {}", modulo);
+    //println!("La diferencia entre la distancia original y la geometrica es de {}", s-modulo);
 
 
 
