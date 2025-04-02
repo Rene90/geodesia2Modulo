@@ -1,6 +1,11 @@
 use std::io;
 use std::f64::consts::PI;
-#[derive(Debug)]
+use serde::Deserialize;
+use std::fs::File;
+use std::error::Error;
+use std::path::Path;
+//#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct Vector3D {
     x:f64,
     y:f64,
@@ -20,6 +25,41 @@ struct PointCurvilinear1{
     phi:f64,
     n:f64,
 }
+//Estructura axuliar para deserializar lo que leemos del archivo que estamos leyendo
+#[derive(Debug, Deserialize)]
+struct CsvPoint{
+    #[serde(rename = "Longitude")]
+    longitud:f64,
+    #[serde(rename = "Latitude")]
+    latitud:f64,
+    #[serde(rename ="Ellipsoidal height")]
+    elipsoidal_height: f64,
+}
+
+pub fn leer_puntos_archivo<P: AsRef<Path>>(file_path: P) -> Result<Vec<PointCurvilinear>, Box<dyn Error>> {
+    let file = File::open(file_path)?;
+    let mut rdr = csv::Reader::from_reader(file);
+    let mut points = Vec::new();
+
+    for result in rdr.deserialize() {
+        let record: CsvPoint = result?;
+        let point = PointCurvilinear {
+            fi: record.latitud,
+            la: record.longitud,
+            h: record.elipsoidal_height,
+        };
+        points.push(point);
+    }
+
+    // Verificación opcional: asegurar que se leyó al menos un punto
+    if points.is_empty() {
+        eprintln!("Advertencia: El archivo CSV no contenía puntos válidos");
+    }
+
+    Ok(points)
+}
+
+
 
 impl Vector3D {
     fn add(&self, other:&Vector3D)-> Vector3D{
@@ -376,30 +416,60 @@ fn compute_p2_Puissant(p_geo: &PointCurvilinear, a: f64, b: f64, s: f64, azimuth
 
 
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>>{
     //WGS84 parameters
     let a = 6378137.000;
     let b = 6356752.3142;
+    //Leer correnadas de los puntos de un archivo csv que resulta del software EMLID de los GPS
+    let puntos=leer_puntos_archivo("C:\\Users\\rob_r\\OneDrive\\Documentos\\geodesiaNotas\\geodesia\\geodesiaII\\datosLevantamiento27Marzo\\gps.csv")?;
+    let mut pointsCartesianos = Vec::new();
+    let mut distanciasPuntos = Vec::new();
+    for (i,point) in puntos.iter().enumerate(){
+        let npunto = computeN(a,b,&point);
+        let vpunto = computeCartesian(&point,npunto,a,b);
+        pointsCartesianos.push(vpunto);
+        println!("Punto {}: latitud={}, latitud={}, altura elipsoidal={}", i+1,point.fi,point.la,point.h);
+    }
+    for i in 0..pointsCartesianos.len(){
+        let puntoactual= pointsCartesianos[i];
+        let siguientePunto = if i == pointsCartesianos.len()-1{
+            pointsCartesianos[0]
+        } else{
+            pointsCartesianos[i+1]
+        };
+        let resta = puntoactual.subtract(&siguientePunto);
+        let dist = resta.module();
+        distanciasPuntos.push(dist);
+        println!("Punto {}: x={}, y={},  z={}", i+1,puntoactual.x,puntoactual.y,puntoactual.z);
+        println!("Distancia entre punto {} y {}: {:.4}", i+1, 
+                 if i == pointsCartesianos.len() - 1 { 1 } else { i+2 }, 
+                 dist);
+    }
+    
+
+
+
     // Pedir al usuario los dos vectores
     //let v1 = read_vector("Ingrese el primer vector:");
     //let v2 = read_vector("Ingrese el segundo vector:");
+
     //Pedir al usuario dos coordenadas 
-    let p1  =read_coordinate("Ingrese las coordenadas del primer punto");
+    //let p1  =read_coordinate("Ingrese las coordenadas del primer punto");
     // let p2  =read_coordinate("Ingrese las coordenadas del segundo punto");
 
 
     //let (resultadoAzimuth,resultadodistancia)=computePuissantInverso(&p1,&p2, a, b);
 
     //problema directo punto , distancia y azimuth
-    let azdist = read_azdist("Ingrese la distancia y azimuth al siguiente punto");
-    let azimuth=azdist.azimuth12;
-    let s= azdist.dist12;
+    //let azdist = read_azdist("Ingrese la distancia y azimuth al siguiente punto");
+    //let azimuth=azdist.azimuth12;
+    //let s= azdist.dist12;
     //let p2  =read_coordinate("Ingrese las coordenadas del segundo punto");
     //Calcular los vectores Normal de cada punto 
-    let n1 = computeN(a,b,&p1);
-    let p2 =compute_p2_Puissant(&p1, a, b, s, azimuth);
-    println!("La latitud del punto 2  es: {}", p2.fi);
-    println!("La longitud del punto 2  es: {}", p2.la);
+    //let n1 = computeN(a,b,&p1);
+    //let p2 =compute_p2_Puissant(&p1, a, b, s, azimuth);
+    //println!("La latitud del punto 2  es: {}", p2.fi);
+    //println!("La longitud del punto 2  es: {}", p2.la);
     //Calcular la distancia entre ambos puntos para comprobar aproximacion, usando los arcos de meridiano y de paralelo
     //let arcoMer =arcoMeridiano(&p1, &p2, a, b);
     //let arcoMer =arcoMeridianoPromedio(&p1, &p2, a, b);
@@ -447,6 +517,7 @@ fn main() {
     //println!("phi: {} radianes", phi22);
     //println!("phi: {} grados", phi22 * 180.0 / PI);
     //println!("n: {}", n22);
+    Ok(())
 
 
 
