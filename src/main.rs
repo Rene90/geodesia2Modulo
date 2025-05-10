@@ -544,7 +544,7 @@ fn lonBessel(
     b0: f64,
     b1: f64,
     b2: f64,
-) -> f64 {
+) -> (f64,f64) {
     let threshold = 1e-12; // Tolerancia más estricta para precisión geodésica
     let e2 = (a.powi(2) - b.powi(2)) / a.powi(2); // Excentricidad al cuadrado correcta
 
@@ -564,6 +564,7 @@ fn lonBessel(
     let mut lambda = ((sigmat.sin() * azimuth12.sin()) / b2.cos()).asin();
     let mut l_diff;
     let mut l_result = 0.0;
+    let mut alpha_result =0.0;
 
     // Iteración principal
     for _ in 0..15 { // Límite de iteraciones razonable
@@ -573,6 +574,7 @@ fn lonBessel(
 
         // Calcular términos trigonométricos medios
         let alpha = ((b1.cos() * b2.cos() * lambda.sin()) / sigmai.sin()).asin();
+        alpha_result= alpha;
         let cos_2sigma_m = sigmai.cos() - (2.0*b1.sin()*b2.sin())/alpha.cos().powi(2);
         let cos_4sigma_m = 2.0*cos_2sigma_m.powi(2) - 1.0;
 
@@ -595,7 +597,7 @@ fn lonBessel(
         lambda = l_result;
     }
 
-    l_result
+    (l_result,alpha_result)
 }
 
 fn iterarSigma(a:f64,b:f64, s:f64, b1:f64, azimuth:f64)->f64{
@@ -637,6 +639,296 @@ fn iterarSigma(a:f64,b:f64, s:f64, b1:f64, azimuth:f64)->f64{
     }
     sigmai
     }
+
+fn reverse_azimuthBessel(azimuth:f64, b2:f64)->f64{
+    let cociente = azimuth.sin() / b2.cos();
+    let azimuthreverse = cociente.asin();
+    azimuthreverse
+}
+
+fn compute_bessel_inverse(
+    p_geo1: &PointCurvilinear,
+    p_geo2: &PointCurvilinear,
+    a: f64,
+    b: f64
+) -> (f64, f64) {
+    // 1. Conversión a radianes y parámetros iniciales
+    let phi1 = p_geo1.fi.to_radians();
+    let phi2 = p_geo2.fi.to_radians();
+    let lam1 = p_geo1.la.to_radians();
+    let lam2 = p_geo2.la.to_radians();
+    
+    let e2 = (a.powi(2) - b.powi(2)) / a.powi(2); // Excentricidad al cuadrado
+    let e_prime2 = (a.powi(2) - b.powi(2)) / b.powi(2); // Segunda excentricidad
+    
+    // 2. Cálculo de latitudes reducidas (β)
+    let beta1 = ((1.0 - e2).sqrt() * phi1.tan()).atan();
+    let beta2 = ((1.0 - e2).sqrt() * phi2.tan()).atan();
+    
+    // 3. Diferencia de longitud y cálculo inicial de σ
+    let delta_lambda = (lam2 - lam1).abs();
+    let cos_sigma = beta1.sin() * beta2.sin() + beta1.cos() * beta2.cos() * delta_lambda.cos();
+    let mut sigma = cos_sigma.acos();
+    
+    // 4. Cálculo inicial del azimut α
+    let alpha = ((beta1.cos() * beta2.cos() * delta_lambda.sin()) / sigma.sin()).asin();
+    
+    // 5. Coeficientes constantes (calculados una sola vez)
+    let b0 = (alpha.sin() * beta1.cos()).acos();
+    let k2 = e_prime2 * alpha.cos().powi(2);
+    
+    let a_coeff = 1.0 + (k2/4.0) - (3.0*k2.powi(2)/64.0);
+    let b_coeff = (k2/4.0) - (k2.powi(2)/16.0);
+    let c_coeff = (k2.powi(2)/64.0);
+    
+    // 6. Iteración para convergencia (ecuación 179 del documento)
+    let mut iter_count = 0;
+    let max_iter = 15;
+    let threshold = 1e-12;
+    let mut lambda_diff_prev;
+    let mut lambda_prev = delta_lambda;
+    let mut sigma_i = 0.0;
+    loop {
+        iter_count += 1;
+        
+        // 7. Cálculo de términos intermedios
+        let cos_sigma_i = beta1.sin() * beta2.sin() + beta1.cos() * beta2.cos() * lambda_prev.cos();
+        sigma_i = cos_sigma_i.acos();
+        
+        let alpha_i = ((beta1.cos() * beta2.cos() * lambda_prev.sin()) / sigma_i.sin()).asin();
+        let b0_i = (alpha_i.sin() * beta1.cos()).acos();
+        
+        let two_sigma_m = 2.0 * ((beta1.sin() * beta2.sin() / sigma_i.cos()).atan()) - sigma_i;
+        let cos_2sigma_m = two_sigma_m.cos();
+        let cos_4sigma_m = 2.0 * cos_2sigma_m.powi(2) - 1.0;
+        
+        // 8. Cálculo de (λ-L) según ecuación 179
+        lambda_diff_prev = (e2/2.0) * b0_i.cos() * (
+            1.0 + e2/4.0 + e2.powi(2)/8.0 - (e2/8.0 + e2.powi(2)/8.0)*b0_i.sin().powi(2) + (3.0*e2.powi(2)/64.0)*b0_i.sin().powi(4)) * sigma_i
+            + ((e2/8.0 + e2.powi(2)/8.0)*b0_i.sin().powi(2) - (e2.powi(2)/16.0)*b0_i.sin().powi(4)) * sigma_i.sin() * cos_2sigma_m
+            + (e2.powi(2)/64.0)*b0_i.sin().powi(4) * (2.0*sigma_i).sin() * cos_4sigma_m / 2.0;
+        
+        
+        // 9. Verificación de convergencia
+        if iter_count >= max_iter || (lambda_diff_prev - (lambda_prev - delta_lambda)).abs() < threshold {
+            if iter_count >= max_iter {
+                println!("Advertencia: Máximo de iteraciones alcanzado");
+            }
+            break;
+        }
+        
+        lambda_prev = delta_lambda + lambda_diff_prev;
+    }
+    
+    // 10. Cálculo final del azimut (ecuación 187)
+    let azimuth12 = (delta_lambda.sin() * beta2.cos()).atan2(
+        beta2.sin() * beta1.cos() - beta2.cos() * beta1.sin() * delta_lambda.cos()
+    ).to_degrees();
+    
+    // 11. Cálculo final de la distancia geodésica (ecuación 165)
+    let two_sigma_m_final = 2.0 * ((beta1.sin() * beta2.sin() / sigma_i.cos()).atan()) - sigma_i;
+    let s = b * (
+        a_coeff * sigma_i  // Término principal (debería dar ~30,855 m)
+        - b_coeff * sigma_i.sin() * two_sigma_m_final.cos()  // Corrección pequeña
+        - (c_coeff/2.0) * (2.0*two_sigma_m_final).cos() * (2.0*sigma_i).sin()
+    );
+    /*let s = b * a_coeff * (sigma_i 
+        - b_coeff * sigma_i.sin() * two_sigma_m_final.cos()
+        - (c_coeff/2.0) * (2.0*sigma_i).sin() * (2.0*two_sigma_m_final).cos()
+    );*/
+    let termino_B = b * b_coeff * sigma_i.sin() * two_sigma_m_final.cos();
+    let termino_C = b * (c_coeff/2.0) * (2.0*two_sigma_m_final).cos() * (2.0*sigma_i).sin();
+    println!("Término s: {} m", s);
+    println!("Término B: {} m", termino_B);
+    println!("Término C: {} m", termino_C);
+    println!("Término principal (b*A*σ): {} m", b * a_coeff * sigma_i);
+    println!("b (semieje menor): {} metros", b);
+    println!("sigmaii (σ): {} radianes", sigma_i);
+    println!("aMayor (A): {}", a_coeff);
+    println!("bMayor (B): {}", b_coeff);
+    println!("cMayor (C): {}", c_coeff);
+        
+    (azimuth12, s)
+}
+fn computeBesselInverso(
+    p_geo1: &PointCurvilinear,
+    p_geo2: &PointCurvilinear,
+    a: f64,
+    b: f64
+) -> (f64, f64) {
+    // 1. Conversión a radianes
+    let phi1 = p_geo1.fi.to_radians();
+    let phi2 = p_geo2.fi.to_radians();
+    let lam1 = p_geo1.la.to_radians();
+    let lam2 = p_geo2.la.to_radians();
+    
+    // 2. Parámetros elipsoidales
+    let e2 = (a.powi(2) - b.powi(2)) / a.powi(2); // Excentricidad al cuadrado
+    let ep2 = (a.powi(2) - b.powi(2)) / b.powi(2); // Segunda excentricidad al cuadrado
+    
+    // 3. Latitudes reducidas
+    let beta1 = ((1.0 - e2).sqrt() * phi1.tan()).atan();
+    let beta2 = ((1.0 - e2).sqrt() * phi2.tan()).atan();
+    
+    // 4. Diferencia de longitud
+    let l_mayus = (lam2 - lam1).abs();
+    
+    // 5. Cálculo inicial de sigma
+    let cos_sigma = beta1.sin() * beta2.sin() + beta1.cos() * beta2.cos() * l_mayus.cos();
+    let mut sigma = cos_sigma.acos();
+    
+    // 6. Azimut inicial
+    let alpha = ((beta1.cos() * beta2.cos() * l_mayus.sin()) / sigma.sin()).asin();
+    
+    // 7. Coeficientes constantes
+    let b0 = (alpha.sin() * beta1.cos()).acos();
+    let k2 = ep2 * alpha.cos().powi(2);
+    
+    let a_coeff = 1.0 + (k2/4.0) - (3.0*k2.powi(2)/64.0);
+    let b_coeff = (k2/4.0) - (k2.powi(2)/16.0);
+    let c_coeff = (k2.powi(2)/64.0);
+    
+    // 8. Iteración para convergencia
+    let mut iter_count = 0;
+    let max_iter = 15;
+    let threshold = 1e-12;
+    let mut sigma_prev;
+    
+    loop {
+        iter_count += 1;
+        sigma_prev = sigma;
+        
+        // 9. Cálculo de términos intermedios
+        let two_sigma_m = 2.0 * ((beta1.sin() * beta2.sin() / sigma.cos()).atan()) - sigma;
+        let cos_2sigma_m = two_sigma_m.cos();
+        
+        // 10. Actualización de sigma
+        sigma = l_mayus / (a_coeff * b * (1.0 
+            - b_coeff * sigma.sin() * cos_2sigma_m 
+            - (c_coeff/2.0) * (2.0*sigma).sin() * (2.0*cos_2sigma_m).cos()
+        ));
+        
+        // 11. Verificación de convergencia
+        if (sigma - sigma_prev).abs() < threshold || iter_count >= max_iter {
+            break;
+        }
+    }
+    
+    // 12. Cálculo final de la distancia geodésica
+    let two_sigma_m_final = 2.0 * ((beta1.sin() * beta2.sin() / sigma.cos()).atan()) - sigma;
+    let s = b * a_coeff * (sigma 
+        - b_coeff * sigma.sin() * two_sigma_m_final.cos()
+        - (c_coeff/2.0) * (2.0*sigma).sin() * (2.0*two_sigma_m_final).cos()
+    );
+    
+    // 13. Cálculo de azimutes
+    let azimuth12 = (alpha.sin() / beta1.cos()).asin();
+    let azimuth21 = (alpha.sin() / beta2.cos()).asin();
+
+    
+    (azimuth12.to_degrees(), s)
+}
+/*
+fn computeBesselInverso(p_geo1: &PointCurvilinear,p_geo2: &PointCurvilinear,a:f64,b:f64)->(f64,f64){
+
+    let phi1=p_geo1.fi* (PI / 180.0);
+    let phi2=p_geo2.fi* (PI / 180.0);
+    let lam1=p_geo1.la* (PI / 180.0);
+    let lam2=p_geo2.la* (PI / 180.0);
+    let delta_lambda = (lam1 - lam2).abs();
+    let delta_phi = (phi1 - phi2).abs();
+    let e2 = 1.0 - (b.powi(2) / a.powi(2));  
+    //Calcular las latitudes reducidas a la esfera
+    let b1 =((1.0_f64-e2).sqrt() * phi1.tan()).atan();
+    let b2 =((1.0_f64-e2).sqrt() * phi2.tan()).atan();
+    
+    let lMayus = (lam2 -lam1).abs();
+    let sigma = b1.sin() * b2.sin()+ (b1.cos() * b2.cos() * lMayus.cos());
+    let azimuth12 = (lMayus.sin() * b2.cos()/sigma.sin()).asin();
+    let b0 =(azimuth12.sin()*b1.cos()).acos();
+    let aprima = 1.0 
+        + e2/4.0 
+        + e2.powi(2)/8.0 
+        - (e2/8.0 + e2.powi(2)/8.0)*b0.sin().powi(2) 
+        + (3.0*e2.powi(2)/64.0)*b0.sin().powi(4);
+
+    let bprima = (e2/8.0 + e2.powi(2)/8.0)*b0.sin().powi(2) 
+        - (e2.powi(2)/16.0)*b0.sin().powi(4);
+
+    let cprima = (e2.powi(2)/64.0)*b0.sin().powi(4);
+    
+    let alpha = ((b1.cos() * b2.cos() * lMayus.sin()) / sigma.sin()).asin(); 
+    let cos_2sigma_m = sigma.cos() - (2.0*b1.sin()*b2.sin())/alpha.cos().powi(2);
+    let cos_4sigma_m = 2.0*cos_2sigma_m.powi(2) - 1.0;
+    let mut l_diff_prev = (e2/2.0) * b0.cos() * (
+        aprima * sigma
+        + bprima * sigma.sin() * cos_2sigma_m
+        + (cprima/2.0) * (2.0*sigma).sin() * cos_4sigma_m);
+    let mut lam_prev = lMayus + l_diff_prev;
+    let mut iter_count = 0;
+    let max_iter = 15;
+    let threshold = 0.00001;
+    let mut sigmaii=0.0;
+    let mut alphaii=0.0;
+    let mut b0ii = 0.0;
+
+    loop {
+        iter_count += 1;
+        if iter_count > max_iter {
+            println!("Advertencia: No converge después de {} iteraciones", max_iter);
+            break; // Límite de iteraciones razonable
+        }
+        // Calcular sigma_i usando el lambda actual
+        let sigmai= b1.sin() * b2.sin()+ (b1.cos() * b2.cos() * lam_prev.cos());
+        sigmaii = sigmai;
+        let azimuth12i = (lam_prev.sin() * b2.cos()/sigmai.sin()).asin();
+        let b0i =(azimuth12i.sin()*b1.cos()).acos();
+        b0ii = b0i;
+        let aprimai = 1.0 
+        + e2/4.0 
+        + e2.powi(2)/8.0 
+        - (e2/8.0 + e2.powi(2)/8.0)*b0i.sin().powi(2) 
+        + (3.0*e2.powi(2)/64.0)*b0i.sin().powi(4);
+        let bprimai = (e2/8.0 + e2.powi(2)/8.0)*b0i.sin().powi(2) 
+            - (e2.powi(2)/16.0)*b0i.sin().powi(4);
+        let cprimai = (e2.powi(2)/64.0)*b0i.sin().powi(4);
+        let alphai = ((b1.cos() * b2.cos() * lam_prev.sin()) / sigmai.sin()).asin(); 
+        alphaii = alphai;
+        let cos_2sigma_mi = sigmai.cos() - (2.0*b1.sin()*b2.sin())/alphai.cos().powi(2);
+        let cos_4sigma_mi = 2.0*cos_2sigma_mi.powi(2) - 1.0;
+        let l_diff_new = (e2/2.0) * b0i.cos() * (
+            aprimai * sigmai
+            + bprimai * sigmai.sin() * cos_2sigma_mi
+            + (cprimai/2.0) * (2.0*sigmai).sin() * cos_4sigma_mi);
+        if (l_diff_new-l_diff_prev).abs() < threshold{
+            break
+        }
+        l_diff_prev = l_diff_new;
+        lam_prev = lMayus + l_diff_prev;
+        
+    }
+    //Calcular azimuths
+    let azimuth12d = (alphaii.sin() / b1.cos()).asin();
+    let azimuth21d = (alphaii.sin() / b2.cos()).asin();
+    let sigma1 = (b1.tan() / azimuth12d.cos()).atan();
+    let dosSigmam = 2.0*sigma1+sigmaii;
+    //Calcular distancia geodesica s
+    let ePrima2 =(a.powi(2)-b.powi(2)) / b.powi(2);
+    println!("eprima2  es: {}", ePrima2);
+    let k2 = ePrima2 * b0ii.sin().powi(2);
+    println!("K  es: {}", k2);
+    let aMayor = 1.0+(k2/4.0)-(3.0*(k2.powi(2))/64.0);
+    println!("A  es: {}", aMayor);
+    let bMayor = (k2/4.0)-(k2.powi(2)/16.0);
+    println!("B  es: {}", bMayor);
+    let cMayor = (k2.powi(2)/64.0);
+    println!("C  es: {}", cMayor);    
+    let s = b* ((aMayor*sigmaii)-(bMayor* sigmaii.sin() *dosSigmam.cos())-((cMayor/2.0)*(2.0*dosSigmam).cos()* (2.0*sigmaii).sin()));
+    (azimuth12d,s)
+
+}*/
+
+
 fn main() -> Result<(), Box<dyn Error>>{
     //WGS84 parameters
     let a = 6378137.000;
@@ -668,8 +960,11 @@ fn main() -> Result<(), Box<dyn Error>>{
                  dist);
     }
     Fin de el segmento que lee las coordenadas de los puntos de un archivo csv y calcula la distancia entre los puntos*/
+
+    
     //Aqui empieza el segmento para calcular distancias geodesicas con Bessel
     //Problema directo con Bessel primer punto, distancia y azimuth al segundo punto conocidos
+    /*
     let p1  =read_coordinate("Ingrese las coordenadas del primer punto");
     let azdist = read_azdist("Ingrese la distancia y azimuth al siguiente punto");
     let azimuth=azdist.azimuth12;
@@ -693,12 +988,30 @@ fn main() -> Result<(), Box<dyn Error>>{
     let fi2= (((latB2).tan())/((1.0_f64-e2).sqrt())).atan();
     println!("La latitud del punto 2 Bessel  es: {}", fi2* (180.0/PI ));
     //Paso 6 calcular la longitud del segundo punto con 179 iterando
-    let lon2pre = lonBessel(a,b,sigmaT,azimuthRadians,latB0,latB1,latB2);
+    let (lon2pre,alphaecuador) = lonBessel(a,b,sigmaT,azimuthRadians,latB0,latB1,latB2);
     let lon2 = latitud1punto+ lon2pre;
     println!("La longitud del punto 2 Bessel es: {}", lon2* (180.0/PI ));
+    let azimuth_inverso = reverse_azimuthBessel(alphaecuador,latB2);
+    println!("el azimuth inverso es: {}", azimuth_inverso);
     let p2 =compute_p2_Puissant(&p1, a, b, s, azimuth);
     println!("La latitud del punto 2  es: {}", p2.fi);
-    println!("La longitud del punto 2  es: {}", p2.la);
+    println!("La longitud del punto 2  es: {}", p2.la);*/
+    //Aqui termina el problema directo con Bessel
+
+
+     //Aqui empieza el problema inverso con Bessel
+     //Pedir al usuario dos coordenadas 
+    let p1  =read_coordinate("Ingrese las coordenadas del primer punto");
+    let p2  =read_coordinate("Ingrese las coordenadas del segundo punto");
+    let (resultadoAzimuth,resultadodistancia)=computePuissantInverso(&p1,&p2, a, b);
+    println!("Azimuth con Puissant  es: {}", resultadoAzimuth);
+    println!("Distancia Geodesica con Puissant  es: {}", resultadodistancia);
+    let (resultadoAzimuthBessel,resultadodistanciaBessel)= compute_bessel_inverse(&p1,&p2, a, b);
+    println!("Azimuth con Bessel  es: {}", resultadoAzimuthBessel);
+    println!("Distancia Geodesica con Bessel  es: {}", resultadodistanciaBessel);
+
+
+
     // Pedir al usuario los dos vectores
     //let v1 = read_vector("Ingrese el primer vector:");
     //let v2 = read_vector("Ingrese el segundo vector:");
