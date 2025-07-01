@@ -554,14 +554,18 @@ fn lonBessel(
         + e2.powi(2)/8.0 
         - (e2/8.0 + e2.powi(2)/8.0)*b0.sin().powi(2) 
         + (3.0*e2.powi(2)/64.0)*b0.sin().powi(4);
+        println!("A prima 1  es: {}", aprima);
 
     let bprima = (e2/8.0 + e2.powi(2)/8.0)*b0.sin().powi(2) 
         - (e2.powi(2)/16.0)*b0.sin().powi(4);
+    println!("B prima 1  es: {}", bprima);
 
     let cprima = (e2.powi(2)/64.0)*b0.sin().powi(4);
+    println!("C prima 1  es: {}", cprima);
 
     // Paso 1: Calcular lambda inicial (aproximación esférica)
     let mut lambda = ((sigmat.sin() * azimuth12.sin()) / b2.cos()).asin();
+    println!(" lambda 1  es: {}", lambda);
     let mut l_diff;
     let mut l_result = 0.0;
     let mut alpha_result =0.0;
@@ -570,13 +574,18 @@ fn lonBessel(
     for _ in 0..15 { // Límite de iteraciones razonable
         // Calcular sigma_i usando el lambda actual
         let cos_sigmai = b1.sin()*b2.sin() + b1.cos()*b2.cos()*lambda.cos();
+
         let sigmai = cos_sigmai.acos();
+        println!(" sigmai 1  es: {}", sigmai);
 
         // Calcular términos trigonométricos medios
         let alpha = ((b1.cos() * b2.cos() * lambda.sin()) / sigmai.sin()).asin();
+        println!(" alpha 1  es: {}", alpha);
         alpha_result= alpha;
         let cos_2sigma_m = sigmai.cos() - (2.0*b1.sin()*b2.sin())/alpha.cos().powi(2);
+        println!(" acos_2sigma_m  es: {}", cos_2sigma_m);
         let cos_4sigma_m = 2.0*cos_2sigma_m.powi(2) - 1.0;
+        println!(" cos_4sigma_m es: {}", cos_4sigma_m);
 
         // Calcular (λ - L) según ecuación (179)
         l_diff = (e2/2.0) * b0.cos() * (
@@ -584,9 +593,11 @@ fn lonBessel(
             + bprima * sigmai.sin() * cos_2sigma_m
             + (cprima/2.0) * (2.0*sigmai).sin() * cos_4sigma_m
         );
+        println!(" l_diff es: {}", l_diff);
 
         // Actualizar L = λ - (λ - L)
         l_result = lambda - l_diff;
+        println!(" l_result es: {}", l_result);
 
         // Verificar convergencia
         if (lambda - l_result).abs() < threshold {
@@ -964,7 +975,7 @@ fn main() -> Result<(), Box<dyn Error>>{
     
     //Aqui empieza el segmento para calcular distancias geodesicas con Bessel
     //Problema directo con Bessel primer punto, distancia y azimuth al segundo punto conocidos
-    /*
+    
     let p1  =read_coordinate("Ingrese las coordenadas del primer punto");
     let azdist = read_azdist("Ingrese la distancia y azimuth al siguiente punto");
     let azimuth=azdist.azimuth12;
@@ -975,14 +986,16 @@ fn main() -> Result<(), Box<dyn Error>>{
     let latB1=latitudB1(&p1,a, b);
     println!("La latitud reducida B1  es: {}", latB1* (180.0/PI ));
     //Paso 2 calcular el azimuth de la geodesica en el ecuador
-    let azec = azimuthRadians.sin() * latB1.cos();
+    let azec = (azimuthRadians.sin() * latB1.cos()).asin();
     println!("Azimuth de la geodesica en el ecuador  es: {}", azec);
     //Paso 3 calcular sigma a traves de iteraciones
     let sigmaT = iterarSigma(a,b, s, latB1, azimuthRadians);
     //Paso 4 calcular B2 usando 145 y B0 con 143a
     let sig1 = (latB1.tan() / azimuthRadians.cos()).atan();
     let latB0 =(azimuthRadians.sin()*latB1.cos()).acos();
+    println!("Lat bo: {}", latB0);
     let latB2 =((sig1+sigmaT).sin()*(latB0).sin()).asin();
+    println!("Lat b2: {}", latB2);
     //Paso 5 Calcular la latitud del punto 2 con la ecuacion 128
     let latitud1punto =p1.la* (PI /180.0);
     let fi2= (((latB2).tan())/((1.0_f64-e2).sqrt())).atan();
@@ -995,20 +1008,20 @@ fn main() -> Result<(), Box<dyn Error>>{
     println!("el azimuth inverso es: {}", azimuth_inverso);
     let p2 =compute_p2_Puissant(&p1, a, b, s, azimuth);
     println!("La latitud del punto 2  es: {}", p2.fi);
-    println!("La longitud del punto 2  es: {}", p2.la);*/
+    println!("La longitud del punto 2  es: {}", p2.la);
     //Aqui termina el problema directo con Bessel
 
 
      //Aqui empieza el problema inverso con Bessel
      //Pedir al usuario dos coordenadas 
-    let p1  =read_coordinate("Ingrese las coordenadas del primer punto");
-    let p2  =read_coordinate("Ingrese las coordenadas del segundo punto");
-    let (resultadoAzimuth,resultadodistancia)=computePuissantInverso(&p1,&p2, a, b);
-    println!("Azimuth con Puissant  es: {}", resultadoAzimuth);
-    println!("Distancia Geodesica con Puissant  es: {}", resultadodistancia);
-    let (resultadoAzimuthBessel,resultadodistanciaBessel)= compute_bessel_inverse(&p1,&p2, a, b);
-    println!("Azimuth con Bessel  es: {}", resultadoAzimuthBessel);
-    println!("Distancia Geodesica con Bessel  es: {}", resultadodistanciaBessel);
+    //let p1  =read_coordinate("Ingrese las coordenadas del primer punto");
+    //let p2  =read_coordinate("Ingrese las coordenadas del segundo punto");
+    //let (resultadoAzimuth,resultadodistancia)=computePuissantInverso(&p1,&p2, a, b);
+    //println!("Azimuth con Puissant  es: {}", resultadoAzimuth);
+    //println!("Distancia Geodesica con Puissant  es: {}", resultadodistancia);
+    //let (resultadoAzimuthBessel,resultadodistanciaBessel)= compute_bessel_inverse(&p1,&p2, a, b);
+    //println!("Azimuth con Bessel  es: {}", resultadoAzimuthBessel);
+    //println!("Distancia Geodesica con Bessel  es: {}", resultadodistanciaBessel);
 
 
 
