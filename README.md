@@ -14,8 +14,8 @@ Este programa resuelve problemas fundamentales de geodesia geométrica, incluyen
 4. **Cálculos Auxiliares:**
    - Radios de curvatura (meridiano `M` y primer vertical `N`)
    - Longitud de arcos (meridiano y paralelo)
-   - Aproximación a una esfera
-
+   - Distancia Euclidiana entre dos puntos
+   - Distancia entre dos puntos aproximando a una esfera (Trigonometría esférica)
 ---
 
 ## 🛠 **Requisitos**
@@ -49,8 +49,8 @@ Altura: 1580 m
 Resultados:
 - Distancia (Puissant): 450.25 km
 - Azimut (Puissant): 45.78°
-- Distancia (Bessel): 450.30 km
-- Azimut (Bessel): 45.75°
+- Distancia (Bessel): 450.26 km
+- Azimut (Bessel): 45.77°
 
 3. Desde Archivo CSV
 Modifica la ruta en leer_puntos_archivo() para procesar datos de GPS (formato: Longitude, Latitude, Ellipsoidal height).
