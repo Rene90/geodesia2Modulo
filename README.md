@@ -59,9 +59,10 @@ Modifica la ruta en leer_puntos_archivo() para procesar datos de GPS (formato: L
 Abre un  issue o envía un pull request!
 
 Elaborado por Rene Manzano,
-email: rene.manzano@ingenieria.unam.edu
-Departamento de Geodesia y Cartografía
-Facultad de Ingeniería
+
+email: rene.manzano@ingenieria.unam.edu, 
+Departamento de Geodesia y Cartografía, 
+Facultad de Ingeniería, 
 Universidad Nacional Autónoma de México, UNAM
 
 Código basado en las Notas de Lectura 26 del departamento de Geomatica y Geodesia de la Universidad de New Brunswick (Krakiwsky, E. J., & Thomson, D. B. (1974). *Geodetic Position Computations* (3rd ed.). Department of Surveying Engineering, University of New Brunswick. https://www2.unb.ca/gge/Pubs/LN26.pdf) y en el libro de  Vaníček, P., & Krakiwsky, E. J. (1986). *Geodesy: The Concepts* (2nd ed.). Elsevier Science. https://doi.org/10.1016/B978-0-444-87775-5.X5001-4
