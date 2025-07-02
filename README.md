@@ -9,8 +9,8 @@ Este programa resuelve problemas fundamentales de geodesia geométrica, incluyen
    - **Directo:** Calcular coordenadas destino desde un punto + azimut/distancia
    - **Inverso:** Calcular distancia y azimut entre dos puntos
 3. **Métodos Implementados:**
-   - Fórmula de Puissant (para <150 km)
-   - Método de Bessel (solución exacta para el elipsoide)
+   - Fórmula de Puissant (recomendada para distancias <80 km)
+   - Método de Bessel (solución exacta para el elipsoide, precisión varia de acuerdo a los terminos usados en las series para las aproximaciones)
 4. **Cálculos Auxiliares:**
    - Radios de curvatura (meridiano `M` y primer vertical `N`)
    - Longitud de arcos (meridiano y paralelo)
